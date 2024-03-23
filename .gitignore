@@ -3,3 +3,8 @@ dist/
 .turbo/
 cdk.out/
 coverage/
+
+# Env files
+.env
+.env.*
+!.env.example
