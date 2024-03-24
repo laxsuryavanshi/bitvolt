@@ -1,7 +1,21 @@
-import { Button, Heading, Image, View, useAuthenticator } from '@aws-amplify/ui-react'
+import {
+  Button,
+  ColorMode,
+  Heading,
+  Image,
+  ToggleButton,
+  ToggleButtonGroup,
+  View,
+  VisuallyHidden,
+  useAuthenticator,
+} from '@aws-amplify/ui-react'
+import { MdContrast, MdDarkMode, MdLightMode } from 'react-icons/md'
+
+import { useTheme } from '../theme'
 
 function Header() {
   const { signOut, isPending } = useAuthenticator()
+  const { colorMode, setColorMode } = useTheme()
 
   return (
     <View as="header" className="sticky w-full top-0 h-16 border-b flex items-center px-8">
@@ -10,6 +24,24 @@ function Header() {
         <Heading level={5}>BitVolt</Heading>
       </View>
       <View className="flex gap-2 ml-auto">
+        <ToggleButtonGroup
+          value={colorMode}
+          isExclusive
+          onChange={value => setColorMode(value as ColorMode)}
+        >
+          <ToggleButton value="light">
+            <VisuallyHidden>Light mode</VisuallyHidden>
+            <MdLightMode />
+          </ToggleButton>
+          <ToggleButton value="dark">
+            <VisuallyHidden>Dark mode</VisuallyHidden>
+            <MdDarkMode />
+          </ToggleButton>
+          <ToggleButton value="system">
+            <VisuallyHidden>System preference</VisuallyHidden>
+            <MdContrast />
+          </ToggleButton>
+        </ToggleButtonGroup>
         <Button size="small" isLoading={isPending} loadingText="Signing Out" onClick={signOut}>
           Sign Out
         </Button>

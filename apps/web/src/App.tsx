@@ -3,6 +3,7 @@ import { Authenticator, Heading, Image, Text, View, useTheme } from '@aws-amplif
 
 import '@aws-amplify/ui-react/styles.css'
 import Home from './components/Home'
+import { ThemeProvider } from './theme'
 
 Amplify.configure({
   Auth: {
@@ -15,9 +16,11 @@ Amplify.configure({
 
 function App() {
   return (
-    <Authenticator loginMechanisms={['email']} hideSignUp components={components}>
-      <Home />
-    </Authenticator>
+    <ThemeProvider>
+      <Authenticator loginMechanisms={['email']} hideSignUp components={components}>
+        <Home />
+      </Authenticator>
+    </ThemeProvider>
   )
 }
 

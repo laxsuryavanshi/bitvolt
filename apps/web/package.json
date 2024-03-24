@@ -14,7 +14,9 @@
     "@fontsource/open-sans": "^5.0.27",
     "aws-amplify": "^6.0.21",
     "react": "^18.2.0",
-    "react-dom": "^18.2.0"
+    "react-dom": "^18.2.0",
+    "react-icons": "^5.0.1",
+    "usehooks-ts": "^3.0.2"
   },
   "devDependencies": {
     "@types/react": "^18.2.56",

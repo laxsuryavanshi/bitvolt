@@ -4,9 +4,30 @@
 
 body {
   font-family: 'Open Sans', sans-serif;
+  background-color: var(--bitvolt-color-primary);
+  color: var(--bitvolt-color-font-primary);
 }
 
 /* tailwind base configuration is overriding button styles */
 .amplify-button--primary {
   background-color: var(--amplify-internal-button-background-color);
+}
+
+@media (prefers-color-scheme: dark) {
+  body[color-mode='system'] {
+    --bitvolt-color-primary: #0d1a26;
+    --bitvolt-color-font-primary: #fff;
+    color-scheme: dark;
+  }
+}
+
+body[color-mode='dark'] {
+  --bitvolt-color-primary: #0d1a26;
+  --bitvolt-color-font-primary: #fff;
+  color-scheme: dark;
+}
+
+:root {
+  --bitvolt-color-primary: #fff;
+  --bitvolt-color-font-primary: #0d1a26;
 }
