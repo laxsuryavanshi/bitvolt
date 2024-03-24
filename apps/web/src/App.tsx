@@ -1,7 +1,8 @@
 import { Amplify } from 'aws-amplify'
-import { Authenticator, Button, Heading, Image, Text, View, useTheme } from '@aws-amplify/ui-react'
+import { Authenticator, Heading, Image, Text, View, useTheme } from '@aws-amplify/ui-react'
 
 import '@aws-amplify/ui-react/styles.css'
+import Home from './components/Home'
 
 Amplify.configure({
   Auth: {
@@ -15,14 +16,7 @@ Amplify.configure({
 function App() {
   return (
     <Authenticator loginMechanisms={['email']} hideSignUp components={components}>
-      {({ signOut, user }) => (
-        <View as="main">
-          <Text>Hello {user?.signInDetails?.loginId}</Text>
-          <Button size="small" onClick={signOut}>
-            Sign out
-          </Button>
-        </View>
-      )}
+      <Home />
     </Authenticator>
   )
 }
