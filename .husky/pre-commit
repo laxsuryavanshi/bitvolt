@@ -7,4 +7,4 @@ export NVM_DIR="$HOME/.nvm"
 
 nvm use
 
-yarn -s turbo lint
+yarn -s lint --force

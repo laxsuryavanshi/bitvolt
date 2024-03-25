@@ -32,7 +32,7 @@ describe('BitvoltStack', () => {
     template.resourceCountIs(AWS_IAM_ROLE, 2)
   })
 
-  describe(AWS_COGNITO_USER_POOL, () => {
+  describe('AWS::Cognito::UserPool', () => {
     it('should set email as username attribute', () => {
       template.hasResourceProperties(AWS_COGNITO_USER_POOL, {
         UsernameAttributes: ['email'],
@@ -74,7 +74,7 @@ describe('BitvoltStack', () => {
     })
   })
 
-  describe(AWS_COGNITO_USER_POOL_CLIENT, () => {
+  describe('AWS::Cognito::UserPoolClient', () => {
     it('should prevent user existence errors', () => {
       template.hasResourceProperties(AWS_COGNITO_USER_POOL_CLIENT, {
         PreventUserExistenceErrors: 'ENABLED',
@@ -94,7 +94,7 @@ describe('BitvoltStack', () => {
     })
   })
 
-  describe(AWS_COGNITO_IDENTITY_POOL, () => {
+  describe('AWS::Cognito::IdentityPool', () => {
     it('should not allow unauthenticated identities to the identity pool', () => {
       template.hasResourceProperties(AWS_COGNITO_IDENTITY_POOL, {
         AllowUnauthenticatedIdentities: false,

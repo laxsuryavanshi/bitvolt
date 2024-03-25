@@ -9,7 +9,10 @@
     "build": "tsc",
     "watch": "tsc -w",
     "cdk": "cdk",
-    "test": "jest"
+    "prelint": "yarn typecheck",
+    "lint": "eslint . --ext ts --max-warnings 0",
+    "test": "jest",
+    "typecheck": "tsc --noEmit"
   },
   "dependencies": {
     "aws-cdk-lib": "2.133.0",

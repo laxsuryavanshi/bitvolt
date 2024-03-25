@@ -8,8 +8,8 @@ import { ThemeProvider } from './theme'
 Amplify.configure({
   Auth: {
     Cognito: {
-      userPoolId: import.meta.env.VITE_USER_POOL_ID,
-      userPoolClientId: import.meta.env.VITE_USER_POOL_CLIENT_ID,
+      userPoolId: import.meta.env.VITE_USER_POOL_ID as string,
+      userPoolClientId: import.meta.env.VITE_USER_POOL_CLIENT_ID as string,
     },
   },
 })
@@ -56,6 +56,7 @@ const components = {
       const { tokens } = useTheme()
 
       return (
+        // eslint-disable-next-line @typescript-eslint/restrict-template-expressions
         <Heading padding={`${tokens.space.xl} 0 0 ${tokens.space.xl}`} level={5}>
           Sign in to your account
         </Heading>
