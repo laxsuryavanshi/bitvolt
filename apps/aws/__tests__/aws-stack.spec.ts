@@ -2,8 +2,11 @@ import * as cdk from 'aws-cdk-lib'
 import { Template } from 'aws-cdk-lib/assertions'
 import { BitvoltStack } from '../lib/aws-stack'
 
-const AWS_COGNIT_USER_POOL = 'AWS::Cognito::UserPool'
-const AWS_COGNIT_USER_POOL_CLIENT = 'AWS::Cognito::UserPoolClient'
+const AWS_COGNITO_USER_POOL = 'AWS::Cognito::UserPool'
+const AWS_COGNITO_USER_POOL_CLIENT = 'AWS::Cognito::UserPoolClient'
+const AWS_COGNITO_IDENTITY_POOL = 'AWS::Cognito::IdentityPool'
+const AWS_COGNITO_IDENTITY_POOL_ROLE_ATTACHMENT = 'AWS::Cognito::IdentityPoolRoleAttachment'
+const AWS_IAM_ROLE = 'AWS::IAM::Role'
 
 describe('BitvoltStack', () => {
   let app: cdk.App
@@ -21,25 +24,37 @@ describe('BitvoltStack', () => {
     expect(stack).toStrictEqual(BitvoltStack.instance)
   })
 
-  describe(AWS_COGNIT_USER_POOL, () => {
-    it('should create a user pool', () => {
-      template.resourceCountIs(AWS_COGNIT_USER_POOL, 1)
-    })
+  it('should create correct number of resources', () => {
+    template.resourceCountIs(AWS_COGNITO_USER_POOL, 1)
+    template.resourceCountIs(AWS_COGNITO_USER_POOL_CLIENT, 1)
+    template.resourceCountIs(AWS_COGNITO_IDENTITY_POOL, 1)
+    template.resourceCountIs(AWS_COGNITO_IDENTITY_POOL_ROLE_ATTACHMENT, 1)
+    template.resourceCountIs(AWS_IAM_ROLE, 2)
+  })
 
+  describe(AWS_COGNITO_USER_POOL, () => {
     it('should set email as username attribute', () => {
-      template.hasResourceProperties(AWS_COGNIT_USER_POOL, {
+      template.hasResourceProperties(AWS_COGNITO_USER_POOL, {
         UsernameAttributes: ['email'],
+        AutoVerifiedAttributes: ['email'],
+        Schema: [
+          {
+            Mutable: true,
+            Name: 'email',
+            Required: true,
+          },
+        ],
       })
     })
 
     it('should not allow user sign up', () => {
-      template.hasResourceProperties(AWS_COGNIT_USER_POOL, {
+      template.hasResourceProperties(AWS_COGNITO_USER_POOL, {
         AdminCreateUserConfig: { AllowAdminCreateUserOnly: true },
       })
     })
 
     it('should allow account recovery from admin only', () => {
-      template.hasResourceProperties(AWS_COGNIT_USER_POOL, {
+      template.hasResourceProperties(AWS_COGNITO_USER_POOL, {
         AccountRecoverySetting: {
           RecoveryMechanisms: [
             {
@@ -50,11 +65,40 @@ describe('BitvoltStack', () => {
         },
       })
     })
+
+    it('should set deletion policy to destroy on user pool', () => {
+      template.hasResource(AWS_COGNITO_USER_POOL, {
+        DeletionPolicy: 'Delete',
+        UpdateReplacePolicy: 'Delete',
+      })
+    })
   })
 
-  describe(AWS_COGNIT_USER_POOL_CLIENT, () => {
-    it('should create a user pool client', () => {
-      template.resourceCountIs(AWS_COGNIT_USER_POOL_CLIENT, 1)
+  describe(AWS_COGNITO_USER_POOL_CLIENT, () => {
+    it('should prevent user existence errors', () => {
+      template.hasResourceProperties(AWS_COGNITO_USER_POOL_CLIENT, {
+        PreventUserExistenceErrors: 'ENABLED',
+      })
+    })
+
+    it('should enable SRP and Custom auth flows', () => {
+      template.hasResourceProperties(AWS_COGNITO_USER_POOL_CLIENT, {
+        ExplicitAuthFlows: ['ALLOW_CUSTOM_AUTH', 'ALLOW_USER_SRP_AUTH', 'ALLOW_REFRESH_TOKEN_AUTH'],
+      })
+    })
+
+    it('should create a default client with cognito provider', () => {
+      template.hasResourceProperties(AWS_COGNITO_USER_POOL_CLIENT, {
+        SupportedIdentityProviders: ['COGNITO'],
+      })
+    })
+  })
+
+  describe(AWS_COGNITO_IDENTITY_POOL, () => {
+    it('should not allow unauthenticated identities to the identity pool', () => {
+      template.hasResourceProperties(AWS_COGNITO_IDENTITY_POOL, {
+        AllowUnauthenticatedIdentities: false,
+      })
     })
   })
 })
