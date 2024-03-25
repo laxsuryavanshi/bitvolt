@@ -6,7 +6,8 @@
     "aws": "dist/aws.js"
   },
   "scripts": {
-    "build": "tsc",
+    "prebuild": "rimraf dist",
+    "build": "tsc -p tsconfig.build.json",
     "watch": "tsc -w",
     "cdk": "cdk",
     "prelint": "yarn typecheck",

@@ -5,7 +5,7 @@ module.exports = {
     project: './tsconfig.json',
     tsconfigRootDir: __dirname,
   },
-  ignorePatterns: ['.eslintrc.cjs', 'jest.config.ts'],
+  ignorePatterns: ['.eslintrc.cjs', 'dist', 'jest.config.ts'],
   overrides: [
     {
       extends: ['bitvolt/jest'],
