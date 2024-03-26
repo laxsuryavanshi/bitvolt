@@ -7,6 +7,7 @@ const AWS_COGNITO_USER_POOL_CLIENT = 'AWS::Cognito::UserPoolClient'
 const AWS_COGNITO_IDENTITY_POOL = 'AWS::Cognito::IdentityPool'
 const AWS_COGNITO_IDENTITY_POOL_ROLE_ATTACHMENT = 'AWS::Cognito::IdentityPoolRoleAttachment'
 const AWS_IAM_ROLE = 'AWS::IAM::Role'
+const AWS_S3_BUCKET = 'AWS::S3::Bucket'
 
 describe('BitvoltStack', () => {
   let app: cdk.App
@@ -29,7 +30,10 @@ describe('BitvoltStack', () => {
     template.resourceCountIs(AWS_COGNITO_USER_POOL_CLIENT, 1)
     template.resourceCountIs(AWS_COGNITO_IDENTITY_POOL, 1)
     template.resourceCountIs(AWS_COGNITO_IDENTITY_POOL_ROLE_ATTACHMENT, 1)
-    template.resourceCountIs(AWS_IAM_ROLE, 2)
+    // additional role is created for a lambda function created to handle
+    // `autoDeleteObjects` setting on S3 bucket
+    template.resourceCountIs(AWS_IAM_ROLE, 3)
+    template.resourceCountIs(AWS_S3_BUCKET, 1)
   })
 
   describe('AWS::Cognito::UserPool', () => {
@@ -98,6 +102,29 @@ describe('BitvoltStack', () => {
     it('should not allow unauthenticated identities to the identity pool', () => {
       template.hasResourceProperties(AWS_COGNITO_IDENTITY_POOL, {
         AllowUnauthenticatedIdentities: false,
+      })
+    })
+  })
+
+  describe('AWS::S3::Bucket', () => {
+    it('should enable cors', () => {
+      template.hasResourceProperties(AWS_S3_BUCKET, {
+        CorsConfiguration: {
+          CorsRules: [
+            {
+              AllowedHeaders: ['*'],
+              AllowedMethods: ['DELETE', 'GET', 'HEAD', 'POST', 'PUT'],
+              AllowedOrigins: ['*'],
+              ExposedHeaders: [
+                'x-amz-server-side-encryption',
+                'x-amz-request-id',
+                'x-amz-id-2',
+                'ETag',
+              ],
+              MaxAge: 3000,
+            },
+          ],
+        },
       })
     })
   })

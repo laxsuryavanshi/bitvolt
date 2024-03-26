@@ -2,6 +2,7 @@ import { Construct } from 'constructs'
 import * as cdk from 'aws-cdk-lib'
 import * as cognito from 'aws-cdk-lib/aws-cognito'
 import * as iam from 'aws-cdk-lib/aws-iam'
+import * as s3 from 'aws-cdk-lib/aws-s3'
 
 export interface BitvoltStackResources {
   userPool: cognito.IUserPool
@@ -10,6 +11,7 @@ export interface BitvoltStackResources {
   identityPoolRoleAttachment: cognito.CfnIdentityPoolRoleAttachment
   authenticatedUserRole: iam.IRole
   unauthenticatedUserRole: iam.IRole
+  bucket: s3.IBucket
 }
 
 export class BitvoltStack extends cdk.Stack {
@@ -29,10 +31,12 @@ export class BitvoltStack extends cdk.Stack {
     const userPool = this._createUserPool()
     const userPoolClient = this._createUserPoolClient(userPool)
     this._createIdentityPool(userPool, userPoolClient)
+    const bucket = this._createS3Bucket()
 
     BitvoltStack._instance = this
     this.resources.userPool = userPool
     this.resources.userPoolClient = userPoolClient
+    this.resources.bucket = bucket
   }
 
   static get instance() {
@@ -156,5 +160,33 @@ export class BitvoltStack extends cdk.Stack {
         ),
       }),
     }
+  }
+
+  private _createS3Bucket(): s3.Bucket {
+    return new s3.Bucket(this, `${this.name}S3Bucket`, {
+      versioned: false,
+      cors: [
+        {
+          maxAge: 3000,
+          exposedHeaders: [
+            'x-amz-server-side-encryption',
+            'x-amz-request-id',
+            'x-amz-id-2',
+            'ETag',
+          ],
+          allowedHeaders: ['*'],
+          allowedOrigins: ['*'],
+          allowedMethods: [
+            s3.HttpMethods.DELETE,
+            s3.HttpMethods.GET,
+            s3.HttpMethods.HEAD,
+            s3.HttpMethods.POST,
+            s3.HttpMethods.PUT,
+          ],
+        },
+      ],
+      autoDeleteObjects: true,
+      removalPolicy: cdk.RemovalPolicy.DESTROY,
+    })
   }
 }
