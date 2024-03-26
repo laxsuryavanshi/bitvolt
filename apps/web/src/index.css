@@ -8,11 +8,6 @@ body {
   color: var(--bitvolt-color-font-primary);
 }
 
-/* tailwind base configuration is overriding button styles */
-.amplify-button--primary {
-  background-color: var(--amplify-internal-button-background-color);
-}
-
 @media (prefers-color-scheme: dark) {
   body[color-mode='system'] {
     --bitvolt-color-primary: #0d1a26;
