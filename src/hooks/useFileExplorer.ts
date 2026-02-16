@@ -1,11 +1,18 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+
+import { getCachedListing, invalidateCachedListing, putCachedListing } from '@/services/cache';
+import {
+  flushMutationQueue,
+  queueCreateFolder,
+  queueDeleteObject,
+  queueDeleteObjects,
+  queueUploadFile,
+} from '@/services/mutationQueue';
 import type { S3Object, SortField, SortOrder, ViewMode } from '@/types/s3';
+import { useNetworkStatus } from './useNetworkStatus';
 import { useS3Service } from './useS3Service';
-
-// ---------------------------------------------------------------------------
-// Upload task tracking
-// ---------------------------------------------------------------------------
 
 export interface UploadTask {
   fileName: string;
@@ -14,19 +21,19 @@ export interface UploadTask {
   error?: string;
 }
 
-// ---------------------------------------------------------------------------
-// Hook
-// ---------------------------------------------------------------------------
+const queryKeys = {
+  listing: (prefix: string) => ['s3', 'listing', prefix] as const,
+};
 
 export function useFileExplorer() {
   const s3 = useS3Service();
+  const queryClient = useQueryClient();
+  const { isOnline } = useNetworkStatus();
 
   // Core state
   const [currentPath, setCurrentPath] = useState('');
-  const [objects, setObjects] = useState<S3Object[]>([]);
   const [selectedKeys, setSelectedKeys] = useState<Set<string>>(new Set());
   const [viewMode, setViewMode] = useState<ViewMode>('grid');
-  const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   // Sort & search
@@ -37,41 +44,55 @@ export function useFileExplorer() {
   // Uploads
   const [uploadTasks, setUploadTasks] = useState<UploadTask[]>([]);
 
-  // -----------------------------------------------------------------------
-  // Fetch
-  // -----------------------------------------------------------------------
+  const listingQuery = useQuery({
+    queryKey: queryKeys.listing(currentPath),
+    queryFn: async (): Promise<S3Object[]> => {
+      if (!s3) return [];
 
-  const fetchObjects = useCallback(
-    async (prefix: string) => {
-      if (!s3) return;
-
-      setIsLoading(true);
-      setError(null);
-      setSelectedKeys(new Set());
-
-      try {
-        const result = await s3.listObjects(prefix);
-        setObjects(result);
-        setCurrentPath(prefix);
-      } catch (err) {
-        setError(err instanceof Error ? err.message : 'Failed to list objects');
-      } finally {
-        setIsLoading(false);
+      if (!isOnline) {
+        const cached = await getCachedListing(currentPath);
+        return cached ?? [];
       }
-    },
-    [s3]
-  );
 
-  const navigate = useCallback(
-    (prefix: string) => {
-      void fetchObjects(prefix);
-    },
-    [fetchObjects]
-  );
+      const result = await s3.listObjects(currentPath);
+      await putCachedListing(currentPath, result);
 
+      return result;
+    },
+    enabled: s3 !== null,
+    placeholderData: prev => prev,
+  });
+
+  useQuery({
+    queryKey: [...queryKeys.listing(currentPath), 'idb-seed'] as const,
+    queryFn: async () => {
+      const cached = await getCachedListing(currentPath);
+      if (cached) {
+        queryClient.setQueryData(queryKeys.listing(currentPath), cached);
+      }
+      return null; // Sentinel — this query's value is unused
+    },
+    enabled: s3 !== null,
+    staleTime: Infinity, // Only run once per lifetime
+    gcTime: 0,
+  });
+
+  const objects = useMemo(() => listingQuery.data ?? [], [listingQuery.data]);
+  const isLoading = listingQuery.isLoading && !listingQuery.isPlaceholderData;
+
+  const navigate = useCallback((prefix: string) => {
+    setCurrentPath(prefix);
+    setSelectedKeys(new Set());
+    setSearchQuery('');
+  }, []);
+
+  /** Hard refresh — invalidates cache, forces API call. */
   const refresh = useCallback(() => {
-    void fetchObjects(currentPath);
-  }, [fetchObjects, currentPath]);
+    void invalidateCachedListing(currentPath);
+    void queryClient.invalidateQueries({
+      queryKey: queryKeys.listing(currentPath),
+    });
+  }, [currentPath, queryClient]);
 
   const navigateUp = useCallback(() => {
     if (!currentPath) return;
@@ -81,33 +102,82 @@ export function useFileExplorer() {
     navigate(parentPath);
   }, [currentPath, navigate]);
 
-  // -----------------------------------------------------------------------
-  // Mutations
-  // -----------------------------------------------------------------------
+  const invalidateCurrentListing = useCallback(() => {
+    void queryClient.invalidateQueries({
+      queryKey: queryKeys.listing(currentPath),
+    });
+  }, [currentPath, queryClient]);
 
-  const createFolder = useCallback(
-    async (folderName: string) => {
-      if (!s3) return;
+  // Helper: optimistically update the listing cache
+  const optimisticAdd = useCallback(
+    (obj: S3Object) => {
+      queryClient.setQueryData<S3Object[]>(queryKeys.listing(currentPath), prev =>
+        prev ? [...prev, obj] : [obj]
+      );
+    },
+    [currentPath, queryClient]
+  );
+
+  const optimisticRemove = useCallback(
+    (keys: string[]) => {
+      const keySet = new Set(keys);
+      queryClient.setQueryData<S3Object[]>(queryKeys.listing(currentPath), prev =>
+        prev ? prev.filter(o => !keySet.has(o.key)) : []
+      );
+    },
+    [currentPath, queryClient]
+  );
+
+  const createFolderMutation = useMutation({
+    mutationFn: async (folderName: string) => {
+      const fullPath = currentPath + folderName;
+      const key = fullPath.endsWith('/') ? fullPath : `${fullPath}/`;
+
+      optimisticAdd({
+        key,
+        name: folderName,
+        isFolder: true,
+      });
+
+      if (!isOnline || !s3) {
+        await queueCreateFolder(fullPath);
+        return;
+      }
+
       try {
-        await s3.createFolder(currentPath + folderName);
-        refresh();
+        await s3.createFolder(fullPath);
+        await putCachedListing(currentPath, [
+          ...objects,
+          { key, name: folderName, isFolder: true },
+        ]);
       } catch (err) {
-        setError(err instanceof Error ? err.message : 'Failed to create folder');
+        // Network failed mid-call → queue and keep optimistic update
+        await queueCreateFolder(fullPath);
         throw err;
       }
     },
-    [s3, currentPath, refresh]
+    onError: err => {
+      // Optimistic update already applied; the mutation is queued.
+      console.warn('[bitvolt] createFolder queued for retry:', err);
+    },
+  });
+
+  const createFolder = useCallback(
+    async (folderName: string) => {
+      await createFolderMutation.mutateAsync(folderName);
+    },
+    [createFolderMutation]
   );
 
   const uploadFiles = useCallback(
     async (files: FileList | File[]) => {
-      if (!s3) return;
+      if (!s3 && isOnline) return;
 
       const fileArray = Array.from(files);
       const tasks: UploadTask[] = fileArray.map(f => ({
         fileName: f.name,
         progress: 0,
-        status: 'pending' as const,
+        status: 'pending',
       }));
       setUploadTasks(tasks);
 
@@ -116,66 +186,105 @@ export function useFileExplorer() {
         const key = currentPath + file.name;
 
         setUploadTasks(prev =>
-          prev.map((t, idx) =>
-            idx === i ? { ...t, status: 'uploading' as const, progress: 50 } : t
-          )
+          prev.map((t, idx) => (idx === i ? { ...t, status: 'uploading', progress: 50 } : t))
         );
 
+        optimisticAdd({
+          key,
+          name: file.name,
+          isFolder: false,
+          size: file.size,
+          lastModified: new Date(),
+        });
+
         try {
-          await s3.uploadFile(key, file);
+          if (!isOnline || !s3) {
+            await queueUploadFile(key, file);
+          } else {
+            await s3.uploadFile(key, file);
+          }
           setUploadTasks(prev =>
-            prev.map((t, idx) => (idx === i ? { ...t, status: 'done' as const, progress: 100 } : t))
+            prev.map((t, idx) => (idx === i ? { ...t, status: 'done', progress: 100 } : t))
           );
-        } catch (err) {
-          setUploadTasks(prev =>
-            prev.map((t, idx) =>
-              idx === i
-                ? {
-                    ...t,
-                    status: 'error' as const,
-                    error: err instanceof Error ? err.message : 'Upload failed',
-                  }
-                : t
-            )
-          );
+        } catch {
+          // Network failed → queue for retry
+          try {
+            await queueUploadFile(key, file);
+            setUploadTasks(prev =>
+              prev.map((t, idx) => (idx === i ? { ...t, status: 'done', progress: 100 } : t))
+            );
+          } catch (queueErr) {
+            setUploadTasks(prev =>
+              prev.map((t, idx) =>
+                idx === i
+                  ? {
+                      ...t,
+                      status: 'error',
+                      error: queueErr instanceof Error ? queueErr.message : 'Queue failed',
+                    }
+                  : t
+              )
+            );
+          }
         }
       }
 
-      setTimeout(() => setUploadTasks([]), 3_000);
-      refresh();
-    },
-    [s3, currentPath, refresh]
-  );
+      // Persist optimistic state to IDB
+      const currentData = queryClient.getQueryData<S3Object[]>(queryKeys.listing(currentPath));
+      if (currentData) void putCachedListing(currentPath, currentData);
 
-  const deleteSelected = useCallback(async () => {
-    if (!s3 || selectedKeys.size === 0) return;
-    try {
-      await s3.deleteObjects(Array.from(selectedKeys));
-      setSelectedKeys(new Set());
-      refresh();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to delete');
-      throw err;
-    }
-  }, [s3, selectedKeys, refresh]);
+      setTimeout(() => setUploadTasks([]), 3_000);
+    },
+    [s3, isOnline, currentPath, optimisticAdd, queryClient]
+  );
 
   const deleteObject = useCallback(
     async (key: string) => {
-      if (!s3) return;
+      optimisticRemove([key]);
+
+      if (!isOnline || !s3) {
+        await queueDeleteObject(key);
+        return;
+      }
+
       try {
         await s3.deleteObject(key);
-        refresh();
-      } catch (err) {
-        setError(err instanceof Error ? err.message : 'Failed to delete');
-        throw err;
+        const currentData = queryClient.getQueryData<S3Object[]>(queryKeys.listing(currentPath));
+        if (currentData) void putCachedListing(currentPath, currentData);
+      } catch {
+        await queueDeleteObject(key);
       }
     },
-    [s3, refresh]
+    [s3, isOnline, currentPath, optimisticRemove, queryClient]
   );
+
+  const deleteSelected = useCallback(async () => {
+    if (selectedKeys.size === 0) return;
+    const keys = Array.from(selectedKeys);
+    optimisticRemove(keys);
+    setSelectedKeys(new Set());
+
+    if (!isOnline || !s3) {
+      await queueDeleteObjects(keys);
+      return;
+    }
+
+    try {
+      await s3.deleteObjects(keys);
+      const currentData = queryClient.getQueryData<S3Object[]>(queryKeys.listing(currentPath));
+      if (currentData) void putCachedListing(currentPath, currentData);
+    } catch {
+      await queueDeleteObjects(keys);
+    }
+  }, [s3, isOnline, selectedKeys, currentPath, optimisticRemove, queryClient]);
 
   const downloadFile = useCallback(
     async (key: string, fileName: string) => {
       if (!s3) return;
+      if (!isOnline) {
+        setError('Cannot download files while offline');
+        return;
+      }
       try {
         const url = await s3.getDownloadUrl(key);
         const link = document.createElement('a');
@@ -190,12 +299,19 @@ export function useFileExplorer() {
         setError(err instanceof Error ? err.message : 'Failed to download');
       }
     },
-    [s3]
+    [s3, isOnline]
   );
 
-  // -----------------------------------------------------------------------
-  // Selection helpers
-  // -----------------------------------------------------------------------
+  const flushQueue = useCallback(async () => {
+    if (!s3 || !isOnline) return;
+    const result = await flushMutationQueue(s3);
+    if (result.flushed > 0) {
+      invalidateCurrentListing();
+    }
+    if (result.failed > 0) {
+      setError(`${result.failed} queued operation(s) failed. Will retry later.`);
+    }
+  }, [s3, isOnline, invalidateCurrentListing]);
 
   const toggleSelect = useCallback((key: string) => {
     setSelectedKeys(prev => {
@@ -214,17 +330,12 @@ export function useFileExplorer() {
     setSelectedKeys(new Set());
   }, []);
 
-  // -----------------------------------------------------------------------
-  // Derived sorted/filtered list
-  // -----------------------------------------------------------------------
-
   const sortedObjects = useMemo(() => {
     const filtered = searchQuery
       ? objects.filter(o => o.name.toLowerCase().includes(searchQuery.toLowerCase()))
       : objects;
 
     return [...filtered].sort((a, b) => {
-      // Folders always first
       if (a.isFolder !== b.isFolder) return a.isFolder ? -1 : 1;
 
       let cmp = 0;
@@ -243,14 +354,6 @@ export function useFileExplorer() {
     });
   }, [objects, searchQuery, sortField, sortOrder]);
 
-  // -----------------------------------------------------------------------
-  // Initial load
-  // -----------------------------------------------------------------------
-
-  useEffect(() => {
-    if (s3) void fetchObjects('');
-  }, [s3, fetchObjects]);
-
   return {
     // State
     currentPath,
@@ -264,6 +367,7 @@ export function useFileExplorer() {
     sortOrder,
     searchQuery,
     uploadTasks,
+    isOnline,
 
     // Actions
     navigate,
@@ -282,5 +386,6 @@ export function useFileExplorer() {
     setSortOrder,
     setSearchQuery,
     setError,
+    flushQueue,
   } as const;
 }

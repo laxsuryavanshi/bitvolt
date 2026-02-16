@@ -2,7 +2,9 @@ import { Source_Sans_3 } from 'next/font/google';
 
 import CssBaseline from '@mui/material/CssBaseline';
 import { ThemeProvider } from '@mui/material/styles';
+import { ReactQueryDevtools } from '@tanstack/react-query-devtools';
 
+import { AppQueryProvider } from '@/context/queryProvider';
 import { S3ConfigProvider } from '@/context/s3config';
 import { theme } from './theme';
 
@@ -26,7 +28,10 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
       <body className={`${sourceSans.variable} antialiased`}>
         <ThemeProvider theme={theme}>
           <CssBaseline />
-          <S3ConfigProvider>{children}</S3ConfigProvider>
+          <AppQueryProvider>
+            <S3ConfigProvider>{children}</S3ConfigProvider>
+            <ReactQueryDevtools initialIsOpen={false} />
+          </AppQueryProvider>
         </ThemeProvider>
       </body>
     </html>
