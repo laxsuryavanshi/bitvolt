@@ -8,6 +8,7 @@ import {
   queueCreateFolder,
   queueDeleteObject,
   queueDeleteObjects,
+  queueRenameObject,
   queueUploadFile,
 } from '@/services/mutationQueue';
 import type { S3Object, SortField, SortOrder, ViewMode } from '@/types/s3';
@@ -302,6 +303,31 @@ export function useFileExplorer() {
     [s3, isOnline]
   );
 
+  const renameObject = useCallback(
+    async (oldKey: string, newKey: string) => {
+      const oldObj = objects.find(o => o.key === oldKey);
+      if (oldObj) {
+        optimisticRemove([oldKey]);
+        const newName = newKey.endsWith('/')
+          ? (newKey.slice(0, -1).split('/').pop() ?? '')
+          : (newKey.split('/').pop() ?? '');
+        optimisticAdd({ ...oldObj, key: newKey, name: newName });
+      }
+      if (!isOnline || !s3) {
+        await queueRenameObject(oldKey, newKey);
+        return;
+      }
+      try {
+        await s3.renameObject(oldKey, newKey);
+        const currentData = queryClient.getQueryData<S3Object[]>(queryKeys.listing(currentPath));
+        if (currentData) void putCachedListing(currentPath, currentData);
+      } catch {
+        await queueRenameObject(oldKey, newKey);
+      }
+    },
+    [s3, isOnline, objects, currentPath, optimisticRemove, optimisticAdd, queryClient]
+  );
+
   const flushQueue = useCallback(async () => {
     if (!s3 || !isOnline) return;
     const result = await flushMutationQueue(s3);
@@ -377,6 +403,7 @@ export function useFileExplorer() {
     uploadFiles,
     deleteSelected,
     deleteObject,
+    renameObject,
     downloadFile,
     toggleSelect,
     selectAll,

@@ -55,6 +55,17 @@ export async function queueDeleteObjects(keys: string[]): Promise<PendingMutatio
   return mutation;
 }
 
+export async function queueRenameObject(oldKey: string, newKey: string): Promise<PendingMutation> {
+  const mutation: PendingMutation = {
+    id: uuid(),
+    type: 'renameObject',
+    createdAt: Date.now(),
+    payload: { oldKey, newKey },
+  };
+  await enqueueMutation(mutation);
+  return mutation;
+}
+
 export interface FlushResult {
   flushed: number;
   failed: number;
