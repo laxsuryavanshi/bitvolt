@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useState, useSyncExternalStore } from 'react';
 
 export interface NetworkStatus {
   /** Whether the browser reports being online. */
@@ -10,34 +10,32 @@ export interface NetworkStatus {
   lastChangedAt: number;
 }
 
+const subscribe = (callback: () => void) => {
+  window.addEventListener('online', callback);
+  window.addEventListener('offline', callback);
+
+  return () => {
+    window.removeEventListener('online', callback);
+    window.removeEventListener('offline', callback);
+  };
+};
+const getSnapshot = () => navigator.onLine;
+const getServerSnapshot = () => true;
+
 /**
  * Subscribes to browser online/offline events and exposes current state.
  * Falls back to `true` if the API is not available.
  */
 export function useNetworkStatus(): NetworkStatus {
-  const [isOnline, setIsOnline] = useState(() =>
-    typeof navigator !== 'undefined' ? navigator.onLine : true
-  );
-  const [lastChangedAt, setLastChangedAt] = useState(Date.now);
+  const isOnline = useSyncExternalStore(subscribe, getSnapshot, getServerSnapshot);
 
-  useEffect(() => {
-    const goOnline = () => {
-      setIsOnline(true);
-      setLastChangedAt(Date.now());
-    };
-    const goOffline = () => {
-      setIsOnline(false);
-      setLastChangedAt(Date.now());
-    };
+  const [lastChangedAt, setLastChangedAt] = useState(() => Date.now());
+  const [prevIsOnline, setPrevIsOnline] = useState(isOnline);
 
-    window.addEventListener('online', goOnline);
-    window.addEventListener('offline', goOffline);
-
-    return () => {
-      window.removeEventListener('online', goOnline);
-      window.removeEventListener('offline', goOffline);
-    };
-  }, []);
+  if (prevIsOnline !== isOnline) {
+    setPrevIsOnline(isOnline);
+    setLastChangedAt(() => Date.now());
+  }
 
   return { isOnline, lastChangedAt };
 }
