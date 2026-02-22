@@ -1,10 +1,18 @@
+'use client';
+
 import React from 'react';
+
+import StarIcon from '@mui/icons-material/Star';
+
+import { ComingSoon } from '@/components/ComingSoon';
 
 const Starred: React.FC = () => {
   return (
-    <div>
-      <h1>Welcome to the Starred</h1>
-    </div>
+    <ComingSoon
+      title="Starred"
+      description="Mark important files and folders with a star for quick access. This feature is coming soon."
+      icon={<StarIcon sx={{ fontSize: 64, color: 'action.disabled' }} />}
+    />
   );
 };
 
