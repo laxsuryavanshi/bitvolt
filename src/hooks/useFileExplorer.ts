@@ -45,21 +45,28 @@ export function useFileExplorer() {
   // Uploads
   const [uploadTasks, setUploadTasks] = useState<UploadTask[]>([]);
 
-  const listingQuery = useQuery({
-    queryKey: queryKeys.listing(currentPath),
-    queryFn: async (): Promise<S3Object[]> => {
+  const fetchListing = useCallback(
+    async (prefix: string): Promise<S3Object[]> => {
       if (!s3) return [];
-
       if (!isOnline) {
-        const cached = await getCachedListing(currentPath);
+        const cached = await getCachedListing(prefix);
         return cached ?? [];
       }
-
-      const result = await s3.listObjects(currentPath);
-      await putCachedListing(currentPath, result);
-
+      const result = await s3.listObjects(prefix);
+      await putCachedListing(prefix, result);
       return result;
     },
+    [isOnline, s3]
+  );
+
+  const persistCacheSnapshot = useCallback(() => {
+    const data = queryClient.getQueryData<S3Object[]>(queryKeys.listing(currentPath));
+    if (data) void putCachedListing(currentPath, data);
+  }, [currentPath, queryClient]);
+
+  const listingQuery = useQuery({
+    queryKey: queryKeys.listing(currentPath),
+    queryFn: () => fetchListing(currentPath),
     enabled: s3 !== null,
     placeholderData: prev => prev,
   });
@@ -147,10 +154,7 @@ export function useFileExplorer() {
 
       try {
         await s3.createFolder(fullPath);
-        await putCachedListing(currentPath, [
-          ...objects,
-          { key, name: folderName, isFolder: true },
-        ]);
+        persistCacheSnapshot();
       } catch (err) {
         // Network failed mid-call → queue and keep optimistic update
         await queueCreateFolder(fullPath);
@@ -163,12 +167,7 @@ export function useFileExplorer() {
     },
   });
 
-  const createFolder = useCallback(
-    async (folderName: string) => {
-      await createFolderMutation.mutateAsync(folderName);
-    },
-    [createFolderMutation]
-  );
+  const createFolder = (folderName: string) => createFolderMutation.mutateAsync(folderName);
 
   const uploadFiles = useCallback(
     async (files: FileList | File[]) => {
@@ -230,13 +229,10 @@ export function useFileExplorer() {
         }
       }
 
-      // Persist optimistic state to IDB
-      const currentData = queryClient.getQueryData<S3Object[]>(queryKeys.listing(currentPath));
-      if (currentData) void putCachedListing(currentPath, currentData);
-
+      persistCacheSnapshot();
       setTimeout(() => setUploadTasks([]), 3_000);
     },
-    [s3, isOnline, currentPath, optimisticAdd, queryClient]
+    [s3, isOnline, currentPath, optimisticAdd, persistCacheSnapshot]
   );
 
   const deleteObject = useCallback(
@@ -250,13 +246,12 @@ export function useFileExplorer() {
 
       try {
         await s3.deleteObject(key);
-        const currentData = queryClient.getQueryData<S3Object[]>(queryKeys.listing(currentPath));
-        if (currentData) void putCachedListing(currentPath, currentData);
+        persistCacheSnapshot();
       } catch {
         await queueDeleteObject(key);
       }
     },
-    [s3, isOnline, currentPath, optimisticRemove, queryClient]
+    [s3, isOnline, optimisticRemove, persistCacheSnapshot]
   );
 
   const deleteSelected = useCallback(async () => {
@@ -272,12 +267,11 @@ export function useFileExplorer() {
 
     try {
       await s3.deleteObjects(keys);
-      const currentData = queryClient.getQueryData<S3Object[]>(queryKeys.listing(currentPath));
-      if (currentData) void putCachedListing(currentPath, currentData);
+      persistCacheSnapshot();
     } catch {
       await queueDeleteObjects(keys);
     }
-  }, [s3, isOnline, selectedKeys, currentPath, optimisticRemove, queryClient]);
+  }, [s3, isOnline, selectedKeys, optimisticRemove, persistCacheSnapshot]);
 
   const downloadFile = useCallback(
     async (key: string, fileName: string) => {
@@ -319,13 +313,12 @@ export function useFileExplorer() {
       }
       try {
         await s3.renameObject(oldKey, newKey);
-        const currentData = queryClient.getQueryData<S3Object[]>(queryKeys.listing(currentPath));
-        if (currentData) void putCachedListing(currentPath, currentData);
+        persistCacheSnapshot();
       } catch {
         await queueRenameObject(oldKey, newKey);
       }
     },
-    [s3, isOnline, objects, currentPath, optimisticRemove, optimisticAdd, queryClient]
+    [s3, isOnline, objects, optimisticRemove, optimisticAdd, persistCacheSnapshot]
   );
 
   const flushQueue = useCallback(async () => {
@@ -338,6 +331,17 @@ export function useFileExplorer() {
       setError(`${result.failed} queued operation(s) failed. Will retry later.`);
     }
   }, [s3, isOnline, invalidateCurrentListing]);
+
+  const prefetchPath = useCallback(
+    (prefix: string) => {
+      void queryClient.prefetchQuery({
+        queryKey: queryKeys.listing(prefix),
+        queryFn: () => fetchListing(prefix),
+        staleTime: Infinity,
+      });
+    },
+    [fetchListing, queryClient]
+  );
 
   const toggleSelect = useCallback((key: string) => {
     setSelectedKeys(prev => {
@@ -398,6 +402,7 @@ export function useFileExplorer() {
     // Actions
     navigate,
     navigateUp,
+    prefetchPath,
     refresh,
     createFolder,
     uploadFiles,

@@ -27,6 +27,7 @@ interface FileListProps {
   onDeselectAll: () => void;
   onOpen: (obj: S3Object) => void;
   onContextMenu: (event: React.MouseEvent, obj: S3Object) => void;
+  onPrefetch?: (key: string) => void;
 }
 
 export const FileList: React.FC<FileListProps> = ({
@@ -38,6 +39,7 @@ export const FileList: React.FC<FileListProps> = ({
   onDeselectAll,
   onOpen,
   onContextMenu,
+  onPrefetch,
 }) => {
   const someSelected = selectedKeys.size > 0;
 
@@ -72,6 +74,7 @@ export const FileList: React.FC<FileListProps> = ({
                 key={obj.key}
                 hover
                 selected={isSelected}
+                onMouseEnter={() => obj.isFolder && onPrefetch?.(obj.key)}
                 onContextMenu={e => {
                   e.preventDefault();
                   onContextMenu(e, obj);

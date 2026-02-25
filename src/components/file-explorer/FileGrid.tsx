@@ -20,6 +20,7 @@ interface FileGridProps {
   onToggleSelect: (key: string) => void;
   onOpen: (obj: S3Object) => void;
   onContextMenu: (event: React.MouseEvent, obj: S3Object) => void;
+  onPrefetch?: (key: string) => void;
 }
 
 export const FileGrid: React.FC<FileGridProps> = ({
@@ -28,6 +29,7 @@ export const FileGrid: React.FC<FileGridProps> = ({
   onToggleSelect,
   onOpen,
   onContextMenu,
+  onPrefetch,
 }) => {
   return (
     <Box
@@ -43,6 +45,7 @@ export const FileGrid: React.FC<FileGridProps> = ({
           <Card
             key={obj.key}
             variant="outlined"
+            onMouseEnter={() => obj.isFolder && onPrefetch?.(obj.key)}
             onContextMenu={e => {
               e.preventDefault();
               onContextMenu(e, obj);

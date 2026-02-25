@@ -232,6 +232,7 @@ export const FileExplorer: React.FC = () => {
             onToggleSelect={explorer.toggleSelect}
             onOpen={handleOpen}
             onContextMenu={handleContextMenu}
+            onPrefetch={explorer.prefetchPath}
           />
         ) : (
           /* List view */
@@ -246,6 +247,7 @@ export const FileExplorer: React.FC = () => {
             onDeselectAll={explorer.deselectAll}
             onOpen={handleOpen}
             onContextMenu={handleContextMenu}
+            onPrefetch={explorer.prefetchPath}
           />
         )}
       </Box>
