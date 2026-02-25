@@ -1,7 +1,7 @@
 'use client';
 
 import Image from 'next/image';
-import { usePathname } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
 import React, { useEffect, useState } from 'react';
 
 import { GetUserCommand, IAMClient } from '@aws-sdk/client-iam';
@@ -72,6 +72,7 @@ const px = (value: number) => `${value.toString()}px`;
 
 const AppLayout: React.FC<React.PropsWithChildren> = ({ children }) => {
   const pathname = usePathname();
+  const router = useRouter();
   const { config } = useS3Config();
   const [username, setUsername] = useState<string>('');
 
@@ -81,6 +82,12 @@ const AppLayout: React.FC<React.PropsWithChildren> = ({ children }) => {
   const handleOpen = (event: React.MouseEvent<HTMLElement>) => setAnchorEl(event.currentTarget);
 
   const handleClose = () => setAnchorEl(null);
+
+  useEffect(() => {
+    if (!config) {
+      router.replace('/');
+    }
+  }, [config, router]);
 
   useEffect(() => {
     if (!config) {
@@ -94,6 +101,8 @@ const AppLayout: React.FC<React.PropsWithChildren> = ({ children }) => {
 
     client.send(new GetUserCommand()).then(response => setUsername(response.User?.UserName ?? ''));
   }, [config]);
+
+  if (!config) return null;
 
   return (
     <Box sx={{ display: 'flex' }}>
