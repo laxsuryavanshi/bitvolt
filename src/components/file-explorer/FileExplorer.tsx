@@ -19,6 +19,7 @@ import MenuItem from '@mui/material/MenuItem';
 import Snackbar from '@mui/material/Snackbar';
 import Typography from '@mui/material/Typography';
 
+import type { UseFileExplorerOptions } from '@/hooks/useFileExplorer';
 import { useFileExplorer } from '@/hooks/useFileExplorer';
 import type { S3Object } from '@/types/s3';
 import { Breadcrumbs } from './Breadcrumbs';
@@ -31,8 +32,10 @@ import { FileList } from './FileList';
 import { RenameDialog } from './RenameDialog';
 import { UploadProgress } from './UploadProgress';
 
-export const FileExplorer: React.FC = () => {
-  const explorer = useFileExplorer();
+export type FileExplorerProps = Pick<UseFileExplorerOptions, 'initialPath' | 'onPathChange'>;
+
+export const FileExplorer: React.FC<FileExplorerProps> = ({ initialPath, onPathChange }) => {
+  const explorer = useFileExplorer({ initialPath, onPathChange });
 
   /* ─── Dialog state ─── */
   const [createFolderOpen, setCreateFolderOpen] = useState(false);

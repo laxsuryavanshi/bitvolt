@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
@@ -26,13 +26,33 @@ const queryKeys = {
   listing: (prefix: string) => ['s3', 'listing', prefix] as const,
 };
 
-export function useFileExplorer() {
+export interface UseFileExplorerOptions {
+  /** Initial path to open (e.g. from URL search params). Defaults to root ('') */
+  initialPath?: string;
+
+  /** Called whenever the user navigates to a different folder */
+  onPathChange?: (path: string) => void;
+}
+
+export function useFileExplorer(options: UseFileExplorerOptions = {}) {
+  const { initialPath = '', onPathChange } = options;
   const s3 = useS3Service();
   const queryClient = useQueryClient();
   const { isOnline } = useNetworkStatus();
 
-  // Core state
-  const [currentPath, setCurrentPath] = useState('');
+  // Keep a stable ref to the callback so navigate doesn't re-create on every render
+  const onPathChangeRef = useRef(onPathChange);
+  useEffect(() => {
+    onPathChangeRef.current = onPathChange;
+  }, [onPathChange]);
+
+  // Core state — keep currentPath in sync when the URL (initialPath) changes
+  // externally (e.g. browser back/forward, direct URL edits, bookmark opens).
+  const [currentPath, setCurrentPath] = useState(initialPath);
+  useEffect(() => {
+    setCurrentPath(initialPath);
+  }, [initialPath]);
+
   const [selectedKeys, setSelectedKeys] = useState<Set<string>>(new Set());
   const [viewMode, setViewMode] = useState<ViewMode>('grid');
   const [error, setError] = useState<string | null>(null);
@@ -92,6 +112,7 @@ export function useFileExplorer() {
     setCurrentPath(prefix);
     setSelectedKeys(new Set());
     setSearchQuery('');
+    onPathChangeRef.current?.(prefix);
   }, []);
 
   /** Hard refresh — invalidates cache, forces API call. */
