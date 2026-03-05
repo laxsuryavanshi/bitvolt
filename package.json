@@ -30,6 +30,7 @@
     "uuid": "^13.0.0"
   },
   "devDependencies": {
+    "@eslint/compat": "^2.0.2",
     "@tailwindcss/postcss": "^4.1.18",
     "@tanstack/react-query-devtools": "^5.91.3",
     "@testing-library/dom": "^10.4.1",
